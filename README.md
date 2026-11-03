@@ -1,105 +1,82 @@
-
 # PTA Server — Protocolo de Transferência de Arquivos
 
 **Discente:** Elen Cristina Rego Gomes — 202600470050
 
 Implementação de um servidor TCP para o **Protocolo de Transferência de Arquivos (PTA)**, desenvolvida como parte de uma atividade prática de Computação em Nuvem.
 
-O servidor permite que clientes autenticados consultem os arquivos disponíveis e solicitem sua transferência, seguindo as regras do protocolo PTA.
-
-## 1. Tecnologias utilizadas
+## 1. Tecnologias e ambiente
 
 - **Linguagem:** Python 3.
+- **Sistema operacional utilizado:** Ubuntu 22.04.5 LTS.
 - **Comunicação:** TCP/IP, utilizando sockets IPv4.
-- **Bibliotecas:**
-  - `socket`: comunicação TCP.
-  - `pathlib`: manipulação e validação de caminhos e arquivos.
-  - `argparse`: processamento de argumentos da linha de comando.
+- **Bibliotecas:** `socket`, `pathlib` e `argparse`, todas pertencentes à biblioteca padrão do Python.
 
-Todas as bibliotecas utilizadas pertencem à biblioteca padrão do Python. Portanto, não é necessária a instalação de dependências externas.
+Não são necessárias dependências externas.
+
+A implementação foi desenvolvida e testada no Ubuntu 22.04.5 LTS. Não há garantia de funcionamento em outros sistemas operacionais ou ambientes.
 
 ## 2. Estrutura do projeto
 
 ```text
-pta-server/
-├── files/
-│   └── arquivos disponibilizados pelo servidor
-├── users.txt
-├── pta-server.py
+PTA/
+├── pta-server/
+│   ├── files/
+│   ├── users.txt
+│   └── pta-server.py
+├── pta-client.py
+├── pta.pdf
 └── README.md
 ```
 
-- `files/`: diretório dos arquivos disponibilizados para transferência.
-- `users.txt`: lista de usuários autorizados.
-- `pta-server.py`: implementação do servidor.
-- `README.md`: documentação do projeto.
-
-Os arquivos e diretórios fornecidos originalmente para a atividade devem ser preservados.
+- `pta-server/files/`: arquivos disponibilizados para transferência.
+- `pta-server/users.txt`: lista de usuários autorizados.
+- `pta-server/pta-server.py`: implementação do servidor.
+- `pta-client.py`: cliente de testes fornecido.
+- `pta.pdf`: especificação original do protocolo.
 
 ## 3. Configuração
 
-### 3.1. Usuários autorizados
+### 3.1. Usuários
 
-Os usuários são carregados a partir de `users.txt`, com um nome por linha.
+Os usuários autorizados são carregados de `users.txt`, com um nome por linha.
 
 Exemplo:
 
 ```text
-usuario1
-usuario2
-usuario3
+user1
+user2
+user3
 ```
 
-A autenticação utiliza codificação ASCII e diferencia letras maiúsculas de minúsculas.
+A autenticação utiliza ASCII, diferencia letras maiúsculas de minúsculas e ignora linhas vazias.
 
-Nomes vazios são ignorados durante o carregamento.
+### 3.2. Arquivos
 
-### 3.2. Arquivos disponíveis
+Os arquivos disponibilizados devem ser armazenados em `files/`.
 
-Os arquivos devem ser armazenados no diretório `files/`.
+O servidor permite listar e transferir arquivos individuais. Os nomes não devem conter espaços, pois o protocolo utiliza espaços como separadores dos campos das mensagens.
 
-O servidor permite listar os arquivos disponíveis e solicitar sua transferência individual.
-
-A validação dos caminhos impede a solicitação de arquivos localizados fora do diretório autorizado, além de rejeitar links simbólicos.
+São rejeitados caminhos externos ao diretório autorizado e links simbólicos.
 
 ## 4. Protocolo de comunicação
 
-A comunicação utiliza TCP na porta `11550`.
+O servidor utiliza TCP na porta `11550`.
 
-As mensagens seguem os formatos:
-
-**Requisição:**
+As requisições seguem o formato:
 
 ```text
 SEQ_NUM COMMAND ARGS
 ```
 
-**Resposta:**
+As respostas seguem o formato:
 
 ```text
 SEQ_NUM REPLY ARGS
 ```
 
-Os campos textuais são separados por espaços. O conteúdo de arquivos, entretanto, é transmitido em bytes, podendo conter qualquer valor binário.
+Os campos textuais são separados por espaços. O conteúdo dos arquivos é transmitido em bytes, permitindo arquivos binários.
 
-### 4.1. Número de sequência
-
-O número de sequência identifica cada requisição do cliente.
-
-- O valor inicial pode ser escolhido livremente pelo cliente.
-- Cada nova requisição deve incrementar o número anterior em uma unidade.
-- A resposta utiliza o mesmo número da requisição correspondente.
-- O servidor verifica se o número recebido corresponde ao próximo número esperado.
-
-Quando não é possível identificar um número de sequência válido, o servidor utiliza o identificador especial `err` na resposta:
-
-```text
-err NOK
-```
-
-Quando o número é identificado, mas não corresponde ao esperado, também é enviada uma resposta de erro com o identificador `err`, conforme a política de validação desta implementação.
-
-### 4.2. Comandos disponíveis
+### 4.1. Comandos
 
 | Comando | Requisição | Resposta de sucesso |
 |---|---|---|
@@ -108,136 +85,98 @@ Quando o número é identificado, mas não corresponde ao esperado, também é e
 | `PEGA` | `SEQ_NUM PEGA arquivo` | `SEQ_NUM ARQ tamanho bytes` |
 | `TERM` | `SEQ_NUM TERM` | `SEQ_NUM OK` |
 
-**CUMP — Apresentação**
+- **CUMP:** autentica o cliente. Deve ser obrigatoriamente a primeira operação. Usuários não cadastrados recebem `NOK` e têm a conexão encerrada.
+- **LIST:** retorna a quantidade de arquivos disponíveis e seus nomes separados por vírgulas, sem espaços. Em caso de falha, retorna `NOK`.
+- **PEGA:** solicita um único arquivo e retorna seu tamanho em bytes seguido de seu conteúdo binário. Arquivos inexistentes ou inválidos recebem `NOK`.
+- **TERM:** responde `OK` e encerra a conexão.
 
-É obrigatoriamente a primeira operação da conexão. O servidor verifica se o usuário informado pertence à lista de usuários autorizados.
+### 4.2. Sequenciamento
 
-- Usuário válido: responde `OK` e libera as demais operações.
-- Usuário inválido: responde `NOK` e encerra a conexão.
+O cliente escolhe o número de sequência inicial, que deve ser incrementado em uma unidade a cada nova requisição.
 
-**LIST — Listagem**
+O servidor verifica se cada número recebido corresponde ao próximo esperado. As respostas utilizam o número da requisição correspondente.
 
-Retorna a quantidade de arquivos disponíveis e seus respectivos nomes, separados por vírgulas e sem espaços entre eles.
+- Sequência identificada, mas incorreta: `SEQ_NUM NOK`.
+- Sequência não identificável: `err NOK`.
 
-Exemplo:
-
-```text
-2 ARQS 3 arquivo1.txt,imagem.png,dados.pdf
-```
-
-Caso a operação não possa ser processada, retorna `NOK`.
-
-**PEGA — Transferência**
-
-Solicita um único arquivo por requisição. A resposta contém o tamanho do arquivo em bytes e seu conteúdo binário.
-
-Exemplo:
-
-```text
-3 ARQ 1024 [conteúdo binário]
-```
-
-Caso o arquivo não exista, seja inválido ou não possa ser acessado, retorna `NOK`.
-
-**TERM — Encerramento**
-
-Encerra a comunicação após responder `OK`. Nenhuma outra operação deve ser realizada naquela conexão.
+Uma sequência inválida não altera o número esperado pelo servidor.
 
 ## 5. Restrições e particularidades da implementação
 
-### 5.1. Autenticação
+### 5.1. Autenticação e comandos
 
-- A primeira mensagem deve obrigatoriamente ser `CUMP`.
-- Não é permitido executar `LIST`, `PEGA` ou `TERM` antes da autenticação.
-- Somente usuários cadastrados em `users.txt` são aceitos.
-- A comparação dos nomes é sensível a maiúsculas e minúsculas.
-- Usuários são representados em ASCII.
+- A primeira mensagem deve ser obrigatoriamente `CUMP`.
+- Antes da autenticação, nenhum outro comando é permitido.
+- Somente usuários presentes em `users.txt` são aceitos.
+- Após a autenticação, são permitidos `LIST`, `PEGA` e `TERM`.
+- `CUMP` e `PEGA` recebem um argumento; `LIST` e `TERM` não recebem argumentos.
+- Apenas um arquivo pode ser solicitado por operação.
+- Comandos desconhecidos ou malformados recebem `NOK`.
+- Após a autenticação, erros de comando não implicam necessariamente o encerramento da conexão.
+- Após `TERM`, a conexão é encerrada.
 
-### 5.2. Comandos e argumentos
+### 5.2. Recebimento de mensagens e timeout
 
-- Somente `CUMP`, `LIST`, `PEGA` e `TERM` são reconhecidos.
-- `CUMP` e `PEGA` exigem exatamente um argumento.
-- `LIST` e `TERM` não recebem argumentos.
-- `PEGA` permite solicitar apenas um arquivo por vez.
-- Os nomes dos arquivos devem corresponder a arquivos existentes no diretório autorizado.
-- Não são aceitos caminhos que permitam acessar arquivos externos ao diretório configurado.
-- Links simbólicos são rejeitados durante a solicitação de arquivos.
-- Comandos inválidos recebem `NOK`. Após a autenticação, esses erros não implicam necessariamente o encerramento da conexão.
+Como o TCP não preserva os limites das mensagens, uma requisição pode chegar dividida em vários segmentos.
 
-### 5.3. Recebimento das mensagens e timeout
+Para determinar o término das mensagens textuais, o servidor utiliza um timeout de **2 segundos** no recebimento:
 
-A comunicação utiliza sockets TCP, que não preservam os limites das mensagens enviadas. Portanto, uma requisição pode chegar ao servidor dividida em vários segmentos.
-
-Para determinar o término de uma mensagem textual, esta implementação utiliza um timeout de **2 segundos** no recebimento de dados.
-
-O funcionamento é o seguinte:
-
-1. O servidor recebe os dados enviados pelo cliente e acumula os segmentos recebidos.
+1. Os segmentos recebidos são acumulados.
 2. Enquanto novos dados chegam, a mensagem continua sendo processada.
-3. Se nenhum novo dado chegar durante 2 segundos, o servidor considera que a mensagem recebida está completa.
-4. A mensagem acumulada é então interpretada e validada.
+3. Se nenhum dado adicional chegar durante 2 segundos, o servidor considera que a mensagem foi completamente recebida.
+4. A mensagem acumulada é então interpretada.
 
-Essa estratégia possui uma particularidade: como não existe um delimitador explícito de término para os comandos textuais, uma mensagem pode ser considerada completa mesmo que o cliente tenha enviado apenas parte de seu conteúdo.
+Não existe um delimitador explícito de término para as mensagens textuais. Portanto, o timeout é utilizado como critério de conclusão, e uma mensagem incompleta também pode ser interpretada como completa.
 
-### 5.4. Validação por prefixo
+### 5.3. Validação por prefixo
 
-Durante a interpretação de `CUMP` e `PEGA`, o servidor considera que um argumento pode ainda estar incompleto enquanto os dados continuam chegando.
+Durante a recepção de `CUMP` e `PEGA`, o servidor admite que o argumento recebido ainda possa estar incompleto.
 
-Assim, uma substring pode ser aceita como válida quando corresponde ao início de um usuário ou nome de arquivo cadastrado.
+Assim, uma substring pode ser considerada válida quando corresponde ao início de um usuário ou nome de arquivo cadastrado.
 
-Por exemplo, se o servidor possui os usuários:
+Por exemplo, considerando os usuários:
 
 ```text
-usuario1
-usuario2
+user1
+user2
 ```
 
 O recebimento de:
 
 ```text
-1 CUMP usuario
+1 CUMP user1
 ```
 
-pode ser considerado uma mensagem ainda incompleta, pois `usuario` é prefixo de usuários válidos.
+pode ser aceito como usuário válido mesmo que o cliente pretendesse enviar `user13`, caso o caractere adicional não chegue antes da conclusão da mensagem.
 
-A validação é concluída quando os dados adicionais chegam ou quando ocorre o timeout de 2 segundos.
+A validação definitiva depende, portanto, dos dados recebidos e do timeout de 2 segundos.
 
-Essa abordagem permite receber mensagens fragmentadas, mas também significa que a aceitação de argumentos depende do tempo de chegada dos dados.
+### 5.4. Arquivos
 
-### 5.5. Sequenciamento
-
-- O primeiro número de sequência é definido pelo cliente.
-- As requisições seguintes devem utilizar números consecutivos.
-- O servidor mantém o próximo número esperado durante toda a conexão.
-- Uma sequência incorreta recebe uma resposta de erro identificada por `err`.
-- O servidor não altera a sequência esperada em caso de número inválido.
-
-### 5.6. Transferência de arquivos
-
-- Os arquivos são transmitidos em formato binário.
+- A transferência é realizada em formato binário.
 - O tamanho informado corresponde à quantidade de bytes do arquivo.
-- Apenas um arquivo pode ser solicitado por operação.
-- A listagem contém somente arquivos regulares encontrados no diretório configurado.
-- Arquivos externos ao diretório autorizado não podem ser acessados.
+- A listagem considera somente arquivos regulares.
+- Caminhos externos ao diretório configurado e links simbólicos são rejeitados.
+- Os nomes dos arquivos não devem conter espaços.
 
 ## 6. Instalação e execução
 
 ### 6.1. Requisitos
 
+- Ubuntu 22.04.5 LTS (ambiente utilizado no desenvolvimento e nos testes).
 - Python 3.
-- Sistema operacional com suporte a sockets TCP.
 - Arquivo `users.txt` configurado.
 - Diretório `files/` disponível.
 
-Não é necessária a instalação de pacotes adicionais.
+Não é necessária a instalação de bibliotecas adicionais.
 
-### 6.2. Verificar a versão do Python
+Verifique a instalação do Python:
 
 ```bash
 python3 --version
 ```
 
-### 6.3. Iniciar o servidor
+### 6.2. Iniciar o servidor
 
 A partir do diretório `pta-server`, execute:
 
@@ -245,18 +184,16 @@ A partir do diretório `pta-server`, execute:
 python3 pta-server.py
 ```
 
-A configuração padrão utiliza:
+Configuração padrão:
 
 ```text
 IP: 0.0.0.0
 PORTA: 11550
 ```
 
-O endereço `0.0.0.0` permite que o servidor aceite conexões pelas interfaces IPv4 disponíveis.
+O endereço `0.0.0.0` permite receber conexões pelas interfaces IPv4 disponíveis.
 
-### 6.4. Argumentos de execução
-
-O servidor permite personalizar os parâmetros por meio da linha de comando:
+### 6.3. Argumentos opcionais
 
 | Argumento | Descrição | Padrão |
 |---|---|---|
@@ -264,7 +201,7 @@ O servidor permite personalizar os parâmetros por meio da linha de comando:
 | `--usersFile` ou `-uf` | Arquivo de usuários | `users.txt` |
 | `--directory` ou `-d` | Diretório de arquivos | `files` |
 
-Exemplo de configuração personalizada:
+Exemplo:
 
 ```bash
 python3 pta-server.py \
@@ -275,9 +212,7 @@ python3 pta-server.py \
 
 ## 7. Testes
 
-O servidor pode ser testado utilizando o cliente disponibilizado no repositório original:
-
-[pta-client.py](https://github.com/glaucogoncalves/pta/blob/master/pta-client.py)
+Para testar o servidor, utilize o cliente exemplo: [pta-client.py](https://github.com/elencris/PTA/blob/main/pta-client.py).
 
 Com o servidor em execução, abra outro terminal e execute:
 
@@ -285,22 +220,14 @@ Com o servidor em execução, abra outro terminal e execute:
 python3 pta-client.py
 ```
 
-O cliente realiza testes de comunicação, incluindo autenticação, listagem e transferência de arquivos.
+O cliente realiza testes de autenticação, listagem e transferência de arquivos. Esses testes não são abrangentes.
 
 ## 8. Encerramento
 
-Para interromper o servidor manualmente, utilize `Ctrl + C`.
-
-O servidor interrompe o loop de atendimento e fecha seu socket de escuta.
+Para interromper o servidor manualmente, pressione `Ctrl + C`.
 
 ## 9. Referências
 
-- [Especificação do Protocolo PTA (pta.pdf)](https://github.com/glaucogoncalves/pta/blob/master/pta.pdf)
+- [Especificação do Protocolo PTA (pta.pdf)](https://github.com/elencris/PTA/blob/main/pta.pdf)
 - [Repositório original do projeto](https://github.com/glaucogoncalves/pta)
-- [Cliente de testes (pta-client.py)](https://github.com/glaucogoncalves/pta/blob/master/pta-client.py)
 - [Documentação oficial do Python](https://docs.python.org/3/)
-
----
-
-**Projeto desenvolvido para fins acadêmicos**, como exercício de implementação de protocolos de aplicação, comunicação TCP, sockets e transferência de arquivos.
-
